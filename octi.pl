@@ -1,5 +1,5 @@
-:- use_module(library(clpfd)).	% Finite domain constraints
-:- use_module(library(dif)).	% Sound inequality
+:- use_module(library(clpfd)). % Finite domain constraints
+:- use_module(library(dif)). % Sound inequality
 
 width(5).
 height(6).
@@ -11,12 +11,12 @@ winpos(green, [(1, 5), (2, 5), (3, 5), (4, 5)]).
 base_game(game(
               red,
               [
-		red - 12,
+  red - 12,
                 green - 12
               ],
               [
-		octi(green, (1, 1), []), octi(green, (2, 1), []), octi(green, (3, 1), []), octi(green, (4, 1), []),
-		octi(red, (1, 5), []), octi(red, (1, 4), []), octi(red, (3, 5), []), octi(red, (4, 5), [])
+  octi(green, (1, 1), []), octi(green, (2, 1), []), octi(green, (3, 1), []), octi(green, (4, 1), []),
+  octi(red, (1, 5), []), octi(red, (1, 4), []), octi(red, (3, 5), []), octi(red, (4, 5), [])
               ]
               )).
 
@@ -40,6 +40,10 @@ map_set([Key0 - Value0 | Rest], [Key0 - Value0 | Cont], Key - Value) :-
     dif(Key0, Key),
     map_set(Rest, Cont, Key - Value).
 
+non_member(_, []).
+non_member(E, [X | Xs]) :-
+    dif(E, X),
+    non_member(E, Xs).
 
 valid_pos((X, Y)) :-
     width(W), height(H),
@@ -70,8 +74,8 @@ turn_1(
     maplist(dif((A, B)), Vectors),
 
     % update board
-    append(Vectors, [(A, B)], NextVectors),
-    append(State0, [octi(Team0, (X, Y), NextVectors)], Board1).
+    NextVectors = [(A, B) | Vectors],
+    Board1 = [octi(Team0, (X, Y), NextVectors) | State0].
 
 % move octigon in case no blocking
 turn_1(
@@ -89,9 +93,9 @@ turn_1(
     add_vectors(NeededVector, (X0, Y0), (X1, Y1)),
 
     % check that nothing is blocking
-    \+ select(octi(_, (X1, Y1), _), Board0, _),
+    non_member(octi(_, (X1, Y1), _), Board0),
 
-    append(State0, [octi(Team0, (X1, Y1), Vectors)], Board1).
+    Board1 = [octi(Team0, (X1, Y1), Vectors) | State0].
 
 % move octigon in case blocking but of own team (jump no eat)
 turn_1(
@@ -111,10 +115,10 @@ turn_1(
     add_vectors(BlockingPos, NeededVector, (X1, Y1)),
 
     % check that own team blocking and no octigon after jump
-    select(octi(Team0, BlockingPos, _), Board0, _),
-    \+ select(octi(_, (X1, Y1), _), Board0, _),
+    member(octi(Team0, BlockingPos, _), Board0),
+    non_member(octi(_, (X1, Y1), _), Board0),
 
-    append(State0, [octi(Team0, (X1, Y1), Vectors)], Board1).
+    Board1 = [octi(Team0, (X1, Y1), Vectors) | State0].
 
 % move octigon in case blocking but of other team (jump and eat)
 turn_1(
@@ -134,18 +138,19 @@ turn_1(
     add_vectors(BlockingPos, NeededVector, (X1, Y1)),
 
     % get arrow count of octi at blocking pos
-    select(octi(Team1, BlockingPos, OtherArrows), Board0, _),
-
+    member(octi(Team1, BlockingPos, OtherArrows), Board0),
+    
     % update arrow count
     length(OtherArrows, AddedArrows),
-    map_get(Arrows0, Team0 - Team0Arrows),
+    map_get(Arrows0, Team0 -
+Team0Arrows),
     NextTeam0Arrows #= Team0Arrows + AddedArrows,
     map_set(Arrows0, Arrows1, Team0 - NextTeam0Arrows),
 
     % check that no octigon after jump
-    \+ select(octi(_, (X1, Y1), _), Board0, _),
+    non_member(octi(_, (X1, Y1), _), Board0),
 
-    append(State0, [octi(Team0, (X1, Y1), Vectors)], State1),
+    State1 = [octi(Team0, (X1, Y1), Vectors) | State0],
 
     % remove eaten octi
     select(octi(_, BlockingPos, _), State1, Board1).
@@ -184,21 +189,20 @@ turn_1(
             move(chain, [(X1, Y1), (X2, Y2) | Cont])
          ).
 
-% team0 wins if team1 doesn't have any moves
+% team0 wins if all octis are of team0
 win(game(_, _, Board), Team0) :-
-    next_team(Team0, Team1),
-    \+ select(octi(Team1, _, _), Board, _).
+    maplist(=(octi(Team0, _, _)), Board).
 
 % team wins if one of the octis are in winpos
 win(game(_, _, Board), Team) :-
     winpos(Team, WinPos),
     member(Pos, WinPos),
-    select(octi(Team, Pos, _), Board, _).
+    member(octi(Team, Pos, _), Board).
 
 % team0 wins if team1 at their turn doesn't have any move
 win(game(Team1, Arrows, Board), Team0) :-
     next_team(Team0, Team1),
-    findall(game(Team1, Arrows, Board), turn_1(game(Team1, Arrows, Board), _, _), []).
+    when(ground(game(Team1, Arrows, Board)), \+ turn_1(game(Team1, Arrows, Board), _, _)).
 
 tabwritenl(X) :-
     write('  '), write(X), nl.
@@ -209,4 +213,3 @@ print_game(game(Team, Arrows, Board)) :-
     write('arrows: '), write(Arrows), nl,
     write('octis: '), nl,
     maplist(tabwritenl, Board), nl.
-
